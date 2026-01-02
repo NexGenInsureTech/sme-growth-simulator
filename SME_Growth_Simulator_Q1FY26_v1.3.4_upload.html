@@ -1,0 +1,580 @@
+
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<title>SME GWP Growth Simulator (Q1 FY26) v1.3.4 — Upload Excel + Baseline Controls</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f7f9fc; }
+  header { background: #0f4c81; color: white; padding: 16px 24px; }
+  h1 { margin: 0; font-size: 20px; }
+  .container { padding: 16px 24px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .card { background: white; border-radius: 8px; padding: 12px 16px; margin: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+  .kpi { font-size: 14px; color: #666; }
+  .kpi strong { font-size: 20px; color: #111; }
+  .controls { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; margin-top: 8px; align-items: end; }
+  label { font-size: 12px; color: #333; display:block; margin-bottom:4px; }
+  input[type=range], input[type=file] { width: 100%; }
+  select, input[type=number] { width: 100%; padding:6px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border: 1px solid #eaeaea; padding: 6px 8px; font-size: 12px; }
+  th { background: #f0f3f7; text-align: left; }
+  .sticky { position: sticky; top: 0; background: #f0f3f7; }
+  .actions { margin-top: 8px; }
+  .actions button { padding: 8px 12px; margin-right: 8px; }
+  .recommend { color: #0f4c81; font-weight: bold; }
+  .status { font-size: 12px; color: #0f4c81; margin-top: 6px; }
+  .error { color: #b00020; }
+  .ok { color: #0b7; }
+  
+/* === Help Sidebar (right navbar) ======================================= */
+.helpSidebar {
+  position: fixed;
+  top: 0; right: 0;
+  height: 100vh; width: 420px; max-width: 90vw;
+  background: #fff;
+  box-shadow: -2px 0 12px rgba(0,0,0,.10);
+  transform: translateX(100%);
+  transition: transform .30s ease;
+  z-index: 9999;
+  display: flex; flex-direction: column;
+}
+.helpSidebar.open { transform: translateX(0); }
+
+.helpHeader {
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+  background: #0f4c81; color: #fff;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.helpHeader button {
+  background: #fff; color: #0f4c81;
+  border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;
+}
+.helpBody { padding: 12px 16px; overflow-y: auto; }
+.helpBody h2, .helpBody h3 { margin-top: 16px; }
+
+.helpTOC { margin-bottom: 10px; }
+.helpTOC strong { display:block; margin-bottom:4px; }
+.helpTOC a {
+  display: block; font-size: 12px; color: #0f4c81;
+  margin: 2px 0; text-decoration: none;
+}
+.helpTOC a:hover { text-decoration: underline; }
+
+</style>
+<!-- Chart.js UMD -->
+<script src='assets/js/chart.umd.js'></script>
+<!-- SheetJS (XLSX) -->
+<script src='assets/js/xlsx.full.min.js'></script>
+</head>
+<body>
+<header>
+  <h1>SME GWP Growth Simulator (Jan–Mar 2026) — v1.3.4 (Upload Excel · Baseline Source · Capacity/Maturity · ₹ Crores default · Unit toggle · RM filter · CSV export)</h1>
+</header>
+<div class='container'>
+  <div class='card'>
+    <div class='controls'>
+      <div>
+        <label>Upload Excel (ACTIVE_AGENT_MASTER.xlsx)</label>
+        <input type='file' id='fileInput' accept='.xlsx,.xlsm,.xls'>
+        <div id='fileStatus' class='status'></div>
+      </div>
+      <div>
+        <label>Scenario</label>
+        <select id='scenario'>
+          <option value='Base'>Base</option>
+          <option value='Stretch'>Stretch</option>
+          <option value='Aggressive'>Aggressive</option>
+        </select>
+      </div>
+      <div>
+        <label>Global ATS Uplift (%)</label>
+        <input type='range' id='ats' min='0' max='100' value='0' step='1' oninput='atsVal.innerText=this.value+"%"'>
+        <span id='atsVal'>0%</span>
+      </div>
+      <div>
+        <label>Global Activation Uplift (%)</label>
+        <input type='range' id='act' min='0' max='100' value='0' step='1' oninput='actVal.innerText=this.value+"%"'>
+        <span id='actVal'>0%</span>
+      </div>
+      <div>
+        <label>Unit</label>
+        <select id='unit'>
+          <option value='cr' selected>₹ Crores</option>
+          <option value='lakh'>₹ Lakhs</option>
+          <option value='m'>Millions</option>
+        </select>
+      </div>
+      <div>
+        <label>Filter by RM</label>
+        <select id='rmFilter'>
+          <option value='ALL' selected>All RMs</option>
+        </select>
+      </div>
+      <!-- New Baseline & Execution Levers -->
+      <div>
+        <label>Baseline Source</label>
+        <select id="baselineSrc">
+          <option value="Q1_FY25">Q1 FY25 Grand Totals</option>
+          <option value="FY25_Quarterly_Avg" selected>FY25 Quarterly Average</option>
+          <option value="FY25_Q4_RunRate">FY25 Q4 (Oct–Dec) Run‑rate</option>
+          <option value="Manual">Manual Q1 Target (₹)</option>
+        </select>
+      </div>
+      <div>
+        <label>Manual Q1 Target (₹)</label>
+        <input type="number" id="manualQ1" placeholder="e.g., 70000000" min="0" step="100000">
+        <div style="margin-top:4px;">
+          <input type="checkbox" id="applyScenarioToManual" checked>
+          <label for="applyScenarioToManual" style="font-size:12px;">Apply scenario uplift to Manual</label>
+        </div>
+      </div>
+      <div>
+        <label>Capacity Uplift (%)</label>
+        <input type="number" id="capacityPct" value="0" min="0" max="200" step="1">
+      </div>
+      <div>
+        <label>Channel Maturity Uplift (%)</label>
+        <input type="number" id="maturityPct" value="0" min="0" max="200" step="1">
+      </div>
+
+      <div class='actions'>
+        <button onclick='resetLevers()'>Reset</button>
+        <button onclick='applyLevers()'>Apply Levers</button>
+        <button onclick='exportCSV()'>Download CSV</button>
+        <button id="toggleHelp" title="Open Manual">Help / Manual</button>
+      </div>
+    </div>
+    <div id='uploadNote' class='status'>v1.3.4 adds Baseline Source (Q1 FY25 / FY25 Quarterly Avg / FY25 Q4 run‑rate / Manual Q1) and Capacity/Maturity uplifts.</div>
+    <div id='errorBox' class='status error'></div>
+    <div id='infoBox' class='status ok'></div>
+  </div>
+
+  <div class='grid'>
+    <div class='card'>
+      <div class='kpi'>Total Q1 GWP<br><strong id='kpiTotal'>—</strong></div>
+      <div class='kpi'>Jan<br><strong id='kpiJan'>—</strong></div>
+      <div class='kpi'>Feb<br><strong id='kpiFeb'>—</strong></div>
+      <div class='kpi'>Mar<br><strong id='kpiMar'>—</strong></div>
+    </div>
+    <div class='card'>
+      <canvas id='zoneChart' height='160'></canvas>
+    </div>
+    <div class='card'>
+      <canvas id='lobChart' height='160'></canvas>
+    </div>
+  </div>
+
+  <div class='card'>
+    <h3>Top Intermediaries — per‑partner levers</h3>
+    <table id='interTable'>
+      <thead>
+        <tr>
+          <th class='sticky'>Intermediary</th>
+          <th class='sticky'>Zone</th>
+          <th class='sticky'>Category</th>
+          <th class='sticky'>FY25 Total</th>
+          <th class='sticky'>Share</th>
+          <th class='sticky'>Scenario Allocation (Q1)</th>
+          <th class='sticky'>ATS %</th>
+          <th class='sticky'>Activation %</th>
+          <th class='sticky'>Adjusted Allocation</th>
+          <th class='sticky'>Recommendation</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class='card'>
+    <h3>Top Products (editable ATS & Activation per row)</h3>
+    <table id='prodTable'>
+      <thead>
+        <tr>
+          <th class='sticky'>LOB</th>
+          <th class='sticky'>Product</th>
+          <th class='sticky'>FY25 Total</th>
+          <th class='sticky'>Share</th>
+          <th class='sticky'>Scenario Allocation (Q1)</th>
+          <th class='sticky'>ATS %</th>
+          <th class='sticky'>Activation %</th>
+          <th class='sticky'>Adjusted Allocation</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- === Right-side Help / Manual Sidebar ================================ -->
+<aside id="helpSidebar" class="helpSidebar" aria-hidden="true">
+  <div class="helpHeader">
+    <strong>Simulator Manual</strong>
+    <button id="closeHelp" title="Close">Close ✕</button>
+  </div>
+
+  <div class="helpBody">
+    <!-- Table of Contents -->
+    <div class="helpTOC">
+      <strong>Contents</strong>
+      #manual-what1. What the simulator does</a>
+      #manual-read2. How to read the dashboard</a>
+      #manual-kpis3. KPI cards</a>
+      #manual-charts4. Charts (Zones &amp; LOB)</a>
+      #manual-inter5. Top Intermediaries (per‑partner levers)</a>
+      #manual-products6. Top Products (ATS &amp; Activation per row)</a>
+      #manual-insights7. Explain insights (presenting to leadership)</a>
+      #manual-strategy8. Preparing strategy (step‑by‑step)</a>
+      #manual-best9. Best practices</a>
+      #manual-troubleshoot10. Troubleshooting</a>
+    </div>
+
+    <!-- 1) What the simulator does -->
+    <section id="manual-what">
+      <h2>1) What the simulator does</h2>
+      <ul>
+        <li>Reads your uploaded <strong>ACTIVE_AGENT_MASTER.xlsx</strong> (Sheet1 &amp; Sheet2) fully client‑side.</li>
+        <li>Builds Jan–Mar 2026 <strong>Base/Stretch/Aggressive</strong> scenario projections using Sheet2 Grand Totals (to avoid double‑counting).</li>
+        <li>Allocates Q1 totals by <strong>Zone, LOB, Product</strong> using FY25 shares from Sheet2 <em>(non‑null LOB rows)</em>.</li>
+        <li>Aggregates <strong>Top Intermediaries</strong> from Sheet1 with <strong>Category</strong> mapped from Sheet2.</li>
+        <li>Lets you apply <strong>Global ATS / Activation</strong> and <strong>per‑row ATS / Activation</strong> levers; the app recalculates <strong>Adjusted Allocation</strong> instantly.</li>
+        <li>Exports the current plan state as <strong>CSV</strong> for circulation to RMs/ops.</li>
+      </ul>
+    </section>
+
+    <!-- 2) How to read the dashboard -->
+    <section id="manual-read">
+      <h2>2) How to read the dashboard</h2>
+      <ul>
+        <li><strong>Upload Excel</strong>: select your latest file; the status line confirms months, LOB rows, intermediaries, products detected.</li>
+        <li><strong>Scenario</strong>: Base (+10%), Stretch (+25%), Aggressive (+40%) YoY uplift baseline.</li>
+        <li><strong>Global ATS</strong>: boosts average ticket size (revenue per policy).</li>
+        <li><strong>Global Activation</strong>: increases number of active intermediaries / conversion cadence.</li>
+        <li><strong>Unit toggle</strong>: choose ₹ Crores / ₹ Lakhs / Millions for display and chart axes.</li>
+        <li><strong>RM filter</strong>: currently aggregate view; RM‑specific splits can be added in v1.4.</li>
+        <li><strong>Download CSV</strong>: exports both Intermediary and Product tables with adjusted values.</li>
+      </ul>
+    </section>
+
+    <!-- 3) KPI cards -->
+    <section id="manual-kpis">
+      <h2>3) KPI cards</h2>
+      <p>Show <strong>Jan, Feb, Mar, and Q1 totals</strong> after your chosen scenario and global levers. These anchor the Q1 premium target.</p>
+    </section>
+
+    <!-- 4) Charts -->
+    <section id="manual-charts">
+      <h2>4) Charts (Zones &amp; LOB)</h2>
+      <ul>
+        <li><strong>Zone Allocation</strong>: Q1 split by zone share—use to assign RM pods and weekly huddles.</li>
+        <li><strong>LOB Allocation</strong>: Q1 split by LOB—use to prioritize SKU plays (e.g., Miscellaneous &gt; Fire &gt; Health).</li>
+        <li><em>Tip:</em> Hover for commas‑formatted INR in tooltips; axes reflect selected unit.</li>
+      </ul>
+    </section>
+
+    <!-- 5) Intermediaries -->
+    <section id="manual-inter">
+      <h2>5) Top Intermediaries (per‑partner levers)</h2>
+      <ul>
+        <li>Columns: FY25 total, share %, scenario allocation, per‑row ATS/Activation, adjusted allocation, recommendation.</li>
+        <li><strong>Use case:</strong> Focus on Top‑30 partners for aggressive plays; apply higher Activation to reactivate dormant but high‑potential partners; apply ATS where bundling add‑ons makes sense.</li>
+        <li><em>Recommendation logic:</em> If Activation ≥20% and ATS ≥10% → “Pod focus + bundle”; Activation ≥10% → “Reactivate + renewal cadence”; else → “Maintain cadence”.</li>
+      </ul>
+    </section>
+
+    <!-- 6) Products -->
+    <section id="manual-products">
+      <h2>6) Top Products (ATS &amp; Activation per row)</h2>
+      <ul>
+        <li>Columns: LOB, product, FY25 total, share %, scenario allocation, row ATS/Activation, adjusted allocation.</li>
+        <li><strong>Use case:</strong> Push Bharat Laghu/Sookshma Udyam, Fire packages, EAR—apply ATS via add‑on bundling (Cyber, Fidelity) and Activation via cross‑sell campaigns.</li>
+      </ul>
+    </section>
+
+    <!-- 7) Explain insights -->
+    <section id="manual-insights">
+      <h2>7) Explain insights (to leadership/team)</h2>
+      <ul>
+        <li>Start with Q1 target: “Base is ₹X Cr; Aggressive is ₹Y Cr.”</li>
+        <li>Show lever impact: “+10% ATS &amp; +20% Activation lifts Q1 by ₹Z Cr.”</li>
+        <li>Zone plan: “West drives 60%; 4 RM pods here with weekly renewal blitz.”</li>
+        <li>LOB/Product focus: “Misc &amp; Fire are 65%; bundle add‑ons and fast quote‑to‑issue.”</li>
+        <li>Partner plan: “Top‑30 cover 70% of FY25; pod focus + cadence to unlock growth.”</li>
+      </ul>
+    </section>
+
+    <!-- 8) Strategy prep -->
+    <section id="manual-strategy">
+      <h2>8) Preparing strategy (step‑by‑step)</h2>
+      <ol>
+        <li><strong>Lock scenario</strong> (Base/Stretch/Aggressive).</li>
+        <li><strong>Apply global levers</strong> (ATS/Activation) to see overall impact.</li>
+        <li><strong>Drill down</strong> Zone → RM → Intermediary → Product.</li>
+        <li><strong>Export CSV</strong> and share targets and playbooks with RMs.</li>
+        <li><strong>Execute</strong> renewal cadence, dormant activation, add‑on bundling.</li>
+      </ol>
+    </section>
+
+    <!-- 9) Best practices -->
+    <section id="manual-best">
+      <h2>9) Best practices</h2>
+      <ul>
+        <li>Refresh the simulator monthly with the latest master.</li>
+        <li>Use Crores for clarity; keep tooltips for exact INR.</li>
+        <li>Track operational KPIs (issuance TAT, renewals, endorsements) alongside plan—can be added as a second pane.</li>
+      </ul>
+    </section>
+
+    <!-- 10) Troubleshooting -->
+    <section id="manual-troubleshoot">
+      <h2>10) Troubleshooting</h2>
+      <ul>
+        <li><strong>Blank tables:</strong> Check the blue status line—should show nonzero months, LOB rows, intermediaries, products.</li>
+        <li><strong>Header errors:</strong> Ensure Sheet1/Sheet2 headers are present (case‑insensitive). Month headers may be “Jan‑25” or “Jan 2025”.</li>
+        <li><strong>Libraries blocked:</strong> If CDNs are blocked, place <code>xlsx.full.min.js</code> and <code>chart.umd.js</code> next to the HTML and reload.</li>
+        <li><strong>Charts error:</strong> v1.3.3 includes safe chart guards; re‑upload and retry.</li>
+      </ul>
+    </section>
+  </div>
+</aside>
+
+
+<script>
+let DATA = null; // populated after Excel upload
+let zoneChart = null, lobChart = null;
+
+function unitFactor() { const u=document.getElementById('unit').value; if(u==='cr')return 10000000; if(u==='lakh')return 100000; if(u==='m')return 1000000; return 10000000; }
+function unitLabel() { const u=document.getElementById('unit').value; if(u==='cr')return ' Cr'; if(u==='lakh')return ' Lakh'; if(u==='m')return ' M'; return ' Cr'; }
+function fmtUnit(x) { return '₹'+(x/unitFactor()).toFixed(2)+unitLabel(); }
+function numToUnit(x) { return (x/unitFactor()); }
+function formatINRComma(x){ return '₹'+Math.round(x).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+let currentScenario='Base', globalATS=0, globalACT=0;
+document.getElementById('scenario').addEventListener('change', e=>{ currentScenario=e.target.value; recompute(); });
+document.getElementById('unit').addEventListener('change', ()=> recompute());
+
+document.getElementById('baselineSrc').addEventListener('change', recompute);
+document.getElementById('manualQ1').addEventListener('input', recompute);
+document.getElementById('applyScenarioToManual').addEventListener('change', recompute);
+document.getElementById('capacityPct').addEventListener('input', recompute);
+document.getElementById('maturityPct').addEventListener('input', recompute);
+
+function scenarioMultiplier(s){ if(s==='Base')return 1.10; if(s==='Stretch')return 1.25; if(s==='Aggressive')return 1.40; return 1.10; }
+
+function safeInitCharts(){
+  try {
+    const zoneCtx=document.getElementById('zoneChart').getContext('2d');
+    const lobCtx=document.getElementById('lobChart').getContext('2d');
+    if (!zoneChart){
+      zoneChart=new Chart(zoneCtx,{ type:'bar', data:{ labels:[], datasets:[{ label:'Zone Allocation (Q1)', data:[], backgroundColor:'#0f4c81' }]}, options:{ plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>{ const v=ctx.parsed.y||ctx.raw; return '₹'+v.toFixed(2)+unitLabel()+' ('+formatINRComma(v*unitFactor())+')'; } } } }, scales:{ y:{ ticks:{ callback:(v)=> '₹'+v+unitLabel() } } } } });
+    }
+    if (!lobChart){
+      lobChart=new Chart(lobCtx,{ type:'bar', data:{ labels:[], datasets:[{ label:'LOB Allocation (Q1)', data:[], backgroundColor:'#3ba3d0' }]}, options:{ plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>{ const v=ctx.parsed.y||ctx.raw; return '₹'+v.toFixed(2)+unitLabel()+' ('+formatINRComma(v*unitFactor())+')'; } } } }, scales:{ y:{ ticks:{ callback:(v)=> '₹'+v+unitLabel() } } } } });
+    }
+  } catch(e){ console.error('Chart init error:', e); }
+}
+
+function pickKey(keys, candidates){ const lower=keys.map(k=>({k,kl:k.toLowerCase()})); for(const cand of candidates){ const c=cand.toLowerCase(); const exact=lower.find(o=>o.kl===c); if(exact) return exact.k; const incl=lower.find(o=>o.kl.includes(c)); if(incl) return incl.k; } return null; }
+function detectMonthCols(keys){ const months=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec']; const out=[]; keys.forEach(k=>{ const kl=k.toLowerCase().replace(/\s+/g,' ').trim(); const m=months.find(mo=> kl.startsWith(mo)); if(m && (/25$/.test(kl) || /2025$/.test(kl))) out.push(k); }); return out; }
+function num(v){ const x=(v==null?0:v); const y=parseFloat(String(x).replace(/,/g,'')); return isNaN(y)?0:y; }
+function col(r,name){ return r[name]; }
+
+function buildDataFromSheets(sheet1, sheet2){
+  const keys1=Object.keys(sheet1[0]||{}); const keys2=Object.keys(sheet2[0]||{});
+  const mcols1=detectMonthCols(keys1); const mcols2=detectMonthCols(keys2);
+  if(mcols1.length===0 || mcols2.length===0) throw new Error('Month columns not detected. Ensure headers like Jan-25 or Jan 2025.');
+  const s2BAN=pickKey(keys2,['BA NAME','BA NAME (SALES)','BA']);
+  const s2Inter=pickKey(keys2,['INTERMEDIARY','INTERMEDIARY NAME']);
+  const s2Cat=pickKey(keys2,['INTERMEDIARY CATEGORY','IMD CATEGORY','CATEGORY']);
+  const s2Zone=pickKey(keys2,['ZONE']);
+  const s2LOB=pickKey(keys2,['LINE OF BUSINESS','LOB']);
+  const s2Prod=pickKey(keys2,['PRODUCT NAME','PRODUCT']);
+  if(!s2BAN||!s2Inter||!s2Zone) throw new Error('Sheet2: missing key columns (BA NAME/INTERMEDIARY/Zone).');
+  const s1RM=pickKey(keys1,['RELATIONSHIP MANAGER NAME (SALES)','RELATIONSHIP MANAGER','RM NAME']);
+  const s1Inter=pickKey(keys1,['INTERMEDIARY NAME (AGENTS, BROKERS, CORPORATE AGENTS)','INTERMEDIARY NAME','INTERMEDIARY']);
+  const s1Zone=pickKey(keys1,['ZONE']);
+  if(!s1RM||!s1Inter||!s1Zone) throw new Error('Sheet1: missing key columns (RM/Intermediary/Zone).');
+
+  const s2Grand=sheet2.find(r=> String(col(r,s2BAN)||'').trim().toLowerCase()==='grand total');
+  if(!s2Grand) throw new Error('Sheet2: Grand Total row not found.');
+  const jan25=num(col(s2Grand,'Jan-25')||col(s2Grand,'Jan 2025')),
+        feb25=num(col(s2Grand,'Feb-25')||col(s2Grand,'Feb 2025')),
+        mar25=num(col(s2Grand,'Mar-25')||col(s2Grand,'Mar 2025'));
+  const scenarios={ Base:{jan:jan25*1.10,feb:feb25*1.10,mar:mar25*1.10}, Stretch:{jan:jan25*1.25,feb:feb25*1.25,mar:mar25*1.25}, Aggressive:{jan:jan25*1.40,feb:feb25*1.40,mar:mar25*1.40} };
+  Object.values(scenarios).forEach(v=> v.total=v.jan+v.feb+v.mar);
+
+  // Baselines
+  function mVal(r,kA,kB){ return num(col(r,kA)||col(r,kB)); }
+  const q1_fy25 = mVal(s2Grand,'Jan-25','Jan 2025') + mVal(s2Grand,'Feb-25','Feb 2025') + mVal(s2Grand,'Mar-25','Mar 2025');
+  const q4_fy25 = mVal(s2Grand,'Oct-25','Oct 2025') + mVal(s2Grand,'Nov-25','Nov 2025') + mVal(s2Grand,'Dec-25','Dec 2025');
+  const annual_fy25 = mcols2.reduce((acc,k)=> acc + num(col(s2Grand,k)), 0);
+
+  // Shares
+  const s2RowsClean=sheet2.map(r=> ({...r,_FY25_Total:mcols2.reduce((a,k)=> a+num(col(r,k)),0)}));
+  const s2NonNullLOB=s2RowsClean.filter(r=> s2LOB && String(col(r,s2LOB)||'').trim()!=='');
+  const lobMap=new Map(); s2NonNullLOB.forEach(r=>{ const key=String(col(r,s2LOB)); lobMap.set(key,(lobMap.get(key)||0)+r._FY25_Total); });
+  const lobTotals=Array.from(lobMap.entries()).map(([lob,tot])=>({'LINE OF BUSINESS':lob,FY25_Total:tot}));
+  const lobSum=lobTotals.reduce((a,b)=> a+b.FY25_Total,0); lobTotals.forEach(r=> r.Share=(lobSum? r.FY25_Total/lobSum:0));
+  const prodMap=new Map(); s2NonNullLOB.forEach(r=>{ const lob=String(col(r,s2LOB)); const prod=String(col(r,s2Prod)||''); const key=lob+'||'+prod; prodMap.set(key,(prodMap.get(key)||0)+r._FY25_Total); });
+  const prodTotals=Array.from(prodMap.entries()).map(([key,tot])=>{ const [lob,prod]=key.split('||'); return {'LINE OF BUSINESS':lob,'PRODUCT NAME':prod,FY25_Total:tot}; });
+  prodTotals.sort((a,b)=> b.FY25_Total-a.FY25_Total); prodTotals.forEach(r=> r.Share=(lobSum? r.FY25_Total/lobSum:0));
+  const zoneMap=new Map(); s2NonNullLOB.forEach(r=>{ const z=String(col(r,s2Zone)||''); zoneMap.set(z,(zoneMap.get(z)||0)+r._FY25_Total); });
+  const zoneTotals=Array.from(zoneMap.entries()).map(([z,tot])=>({Zone:z,FY25_Total:tot}));
+  const zoneSum=zoneTotals.reduce((a,b)=> a+b.FY25_Total,0); zoneTotals.forEach(r=> r.Share=(zoneSum? r.FY25_Total/zoneSum:0));
+  const catLookup=new Map(); sheet2.forEach(r=>{ const i=col(r,s2Inter), c=col(r,s2Cat); if(i!=null && c!=null && String(i).trim()!=='') catLookup.set(String(i).trim(), String(c).trim()); });
+
+  // Sheet1 intermediaries
+  const s1Grand=sheet1.find(r=> String(col(r,s1RM)||'').trim().toLowerCase()==='grand total');
+  const s1Denom=s1Grand? mcols1.reduce((a,k)=> a+num(col(s1Grand,k)),0) : sheet1.reduce((acc,row)=> acc+mcols1.reduce((a,k)=> a+num(col(row,k)),0),0);
+  const interMap=new Map(); sheet1.forEach(r=>{ const name=String(col(r,s1Inter)||'').trim(); const zone=String(col(r,s1Zone)||'').trim(); if(!name) return; const tot=mcols1.reduce((a,k)=> a+num(col(r,k)),0); const key=name+'||'+zone; const prev=interMap.get(key)||{Intermediary:name,Zone:zone,FY25_Total:0}; prev.FY25_Total+=tot; interMap.set(key,prev); });
+  const interTotals=Array.from(interMap.values()); interTotals.forEach(r=>{ r.Category=catLookup.get(r.Intermediary)||''; r.Share=(s1Denom? r.FY25_Total/s1Denom:0); }); interTotals.sort((a,b)=> b.FY25_Total-a.FY25_Total);
+  const rmSet=new Set(); sheet1.forEach(r=>{ const rm=col(r,s1RM); if(rm && String(rm).trim().toLowerCase()!=='grand total') rmSet.add(String(rm).trim()); });
+
+  const infoBox=document.getElementById('infoBox');
+  infoBox.textContent = 'Detected months: Sheet1='+mcols1.length+', Sheet2='+mcols2.length+' | LOB rows='+s2NonNullLOB.length+' | Intermediaries='+interTotals.length+' | Products='+prodTotals.length;
+
+  return {
+    summary:scenarios,
+    baselines:{ q1_fy25, q4_fy25, annual_fy25 },
+    zones:zoneTotals,
+    lobs:lobTotals,
+    products_top50:prodTotals.slice(0,50),
+    intermediaries_all:interTotals,
+    intermediaries_top30:interTotals.slice(0,30),
+    rms:Array.from(rmSet.values())
+  };
+}
+
+// Upload & parse
+const fileInput=document.getElementById('fileInput'); const fileStatus=document.getElementById('fileStatus'); const errorBox=document.getElementById('errorBox');
+fileInput.addEventListener('change', async (evt)=>{
+  errorBox.textContent=''; const f=evt.target.files[0]; if(!f) return; fileStatus.textContent='Reading: '+f.name+'…';
+  try{
+    const data=await f.arrayBuffer(); const wb=XLSX.read(data,{type:'array'});
+    const s1Name=wb.SheetNames.find(n=> n.toLowerCase().includes('sheet1'))||'Sheet1';
+    const s2Name=wb.SheetNames.find(n=> n.toLowerCase().includes('sheet2'))||'Sheet2';
+    const sh1=wb.Sheets[s1Name]; const sh2=wb.Sheets[s2Name]; if(!sh1||!sh2) throw new Error('Could not locate Sheet1/Sheet2');
+    const sheet1=XLSX.utils.sheet_to_json(sh1,{defval:null}); const sheet2=XLSX.utils.sheet_to_json(sh2,{defval:null});
+    DATA=buildDataFromSheets(sheet1, sheet2);
+    populateRMFilter(DATA.rms);
+    fileStatus.textContent='Loaded: '+f.name+' (Sheets: '+s1Name+', '+s2Name+')';
+    safeInitCharts();
+    recompute();
+  }catch(e){ console.error(e); errorBox.textContent='Upload error: '+e.message; }
+});
+
+function populateRMFilter(rms){ const rmSel=document.getElementById('rmFilter'); rmSel.innerHTML='<option value=\'ALL\' selected>All RMs</option>'; (rms||[]).forEach(rm=>{ const opt=document.createElement('option'); opt.value=rm; opt.textContent=rm; rmSel.appendChild(opt); }); }
+
+function applyLevers(){ globalATS=parseFloat(document.getElementById('ats').value)||0; globalACT=parseFloat(document.getElementById('act').value)||0; recompute(); }
+function resetLevers(){ document.getElementById('ats').value=0; atsVal.innerText='0%'; document.getElementById('act').value=0; actVal.innerText='0%'; document.getElementById('unit').value='cr'; document.getElementById('rmFilter').value='ALL'; document.getElementById('baselineSrc').value='FY25_Quarterly_Avg'; document.getElementById('manualQ1').value=''; document.getElementById('applyScenarioToManual').checked=true; document.getElementById('capacityPct').value=0; document.getElementById('maturityPct').value=0; currentScenario='Base'; globalATS=0; globalACT=0; recompute(); }
+
+function recompute(){ if(!DATA){ errorBox.textContent='Please upload your Excel first.'; return; } errorBox.textContent=''; safeInitCharts();
+  const scMul = scenarioMultiplier(currentScenario);
+  const ATS   = parseFloat(document.getElementById('ats').value)||0;
+  const ACT   = parseFloat(document.getElementById('act').value)||0;
+  const CAP   = parseFloat(document.getElementById('capacityPct').value)||0;
+  const MAT   = parseFloat(document.getElementById('maturityPct').value)||0;
+  const src   = document.getElementById('baselineSrc').value;
+  const applyToManual = document.getElementById('applyScenarioToManual').checked;
+  const B = DATA.baselines; // q1_fy25, q4_fy25, annual_fy25
+
+  let Q1_base = 0;
+  if (src === 'Q1_FY25') {
+    Q1_base = B.q1_fy25 * scMul;
+  } else if (src === 'FY25_Quarterly_Avg') {
+    Q1_base = (B.annual_fy25/4) * scMul;
+  } else if (src === 'FY25_Q4_RunRate') {
+    Q1_base = B.q4_fy25 * scMul;
+  } else if (src === 'Manual') {
+    const manual = parseFloat(document.getElementById('manualQ1').value)||0;
+    Q1_base = applyToManual ? (manual * scMul) : manual;
+  }
+
+  const total = Q1_base * (1 + ATS/100) * (1 + ACT/100) * (1 + CAP/100) * (1 + MAT/100);
+  const jan = total/3, feb = total/3, mar = total/3; // simple even split
+
+  document.getElementById('kpiJan').innerText   = fmtUnit(jan);
+  document.getElementById('kpiFeb').innerText   = fmtUnit(feb);
+  document.getElementById('kpiMar').innerText   = fmtUnit(mar);
+  document.getElementById('kpiTotal').innerText = fmtUnit(total);
+
+  try{
+    const zlabels=DATA.zones.map(z=>z.Zone); const zvals=DATA.zones.map(z=> numToUnit(z.Share*total));
+    if (!zoneChart.data) zoneChart.data = {labels:[], datasets:[{data:[], label:'Zone Allocation (Q1)', backgroundColor:'#0f4c81'}]};
+    zoneChart.data.labels=zlabels; zoneChart.data.datasets[0].data=zvals; zoneChart.update();
+  }catch(e){ console.error('Zone chart update error:', e); }
+
+  try{
+    const llabels=DATA.lobs.map(l=>l['LINE OF BUSINESS']); const lvals=DATA.lobs.map(l=> numToUnit(l.Share*total));
+    if (!lobChart.data) lobChart.data = {labels:[], datasets:[{data:[], label:'LOB Allocation (Q1)', backgroundColor:'#3ba3d0'}]};
+    lobChart.data.labels=llabels; lobChart.data.datasets[0].data=lvals; lobChart.update();
+  }catch(e){ console.error('LOB chart update error:', e); }
+
+  const tbody=document.querySelector('#interTable tbody'); tbody.innerHTML=''; const inter=(DATA.intermediaries_all||[]).slice().sort((a,b)=> b.FY25_Total-a.FY25_Total).slice(0,30);
+  inter.forEach(r=>{ const alloc=r.Share*total; const tr=document.createElement('tr'); tr.innerHTML=`
+      <td>${r.Intermediary}</td>
+      <td>${r.Zone||''}</td>
+      <td>${r.Category||''}</td>
+      <td>${fmtUnit(r.FY25_Total)}</td>
+      <td>${(r.Share*100).toFixed(2)}%</td>
+      <td class='alloc'>${numToUnit(alloc).toFixed(2)}</td>
+      <td><input type='number' class='atsRow' value='${ATS}' min='0' max='100' step='1'></td>
+      <td><input type='number' class='actRow' value='${ACT}' min='0' max='100' step='1'></td>
+      <td class='adjusted'>${numToUnit(alloc).toFixed(2)}</td>
+      <td class='recommend'></td>`; tbody.appendChild(tr); });
+  applyRowLevers();
+
+  const pbody=document.querySelector('#prodTable tbody'); pbody.innerHTML=''; const products=(DATA.products_top50||[]);
+  products.forEach(p=>{ const alloc=p.Share*total; const tr=document.createElement('tr'); tr.innerHTML=`
+      <td>${p['LINE OF BUSINESS']||''}</td>
+      <td>${p['PRODUCT NAME']||''}</td>
+      <td>${fmtUnit(p.FY25_Total)}</td>
+      <td>${(p.Share*100).toFixed(2)}%</td>
+      <td class='palloc'>${numToUnit(alloc).toFixed(2)}</td>
+      <td><input type='number' class='patsRow' value='${ATS}' min='0' max='100' step='1'></td>
+      <td><input type='number' class='pactRow' value='${ACT}' min='0' max='100' step='1'></td>
+      <td class='padjusted'>${numToUnit(alloc).toFixed(2)}</td>`; pbody.appendChild(tr); });
+  applyProductLevers();
+}
+
+function applyRowLevers(){ const rows=document.querySelectorAll('#interTable tbody tr'); rows.forEach(tr=>{ const allocCell=tr.querySelector('.alloc'); const adjCell=tr.querySelector('.adjusted'); const ats=parseFloat(tr.querySelector('.atsRow').value)||0; const act=parseFloat(tr.querySelector('.actRow').value)||0; const allocUnit=parseFloat(allocCell.textContent.replace(/[^0-9.]/g,''))||0; const allocVal=allocUnit*unitFactor(); const adjVal=allocVal*(1+ats/100)*(1+act/100); adjCell.textContent=numToUnit(adjVal).toFixed(2); const rec=tr.querySelector('.recommend'); rec.textContent=(act>=20 && ats>=10)?'Pod focus + bundle (go aggressive)':(act>=10)?'Reactivate + renewal cadence':'Maintain cadence'; tr.querySelector('.atsRow').addEventListener('input', applyRowLevers); tr.querySelector('.actRow').addEventListener('input', applyRowLevers); }); }
+function applyProductLevers(){ const rows=document.querySelectorAll('#prodTable tbody tr'); rows.forEach(tr=>{ const allocCell=tr.querySelector('.palloc'); const adjCell=tr.querySelector('.padjusted'); const ats=parseFloat(tr.querySelector('.patsRow').value)||0; const act=parseFloat(tr.querySelector('.pactRow').value)||0; const allocUnit=parseFloat(allocCell.textContent.replace(/[^0-9.]/g,''))||0; const allocVal=allocUnit*unitFactor(); const adjVal=allocVal*(1+ats/100)*(1+act/100); adjCell.textContent=numToUnit(adjVal).toFixed(2); tr.querySelector('.patsRow').addEventListener('input', applyProductLevers); tr.querySelector('.pactRow').addEventListener('input', applyProductLevers); }); }
+
+function exportCSV(){ if(!DATA){ alert('Upload your Excel first.'); return; } const rows=[]; const unit=document.getElementById('unit').value; rows.push(['Scenario', currentScenario]); rows.push(['Unit', unit]); rows.push(['Baseline Source', document.getElementById('baselineSrc').value]); rows.push(['Capacity %', document.getElementById('capacityPct').value]); rows.push(['Maturity %', document.getElementById('maturityPct').value]); rows.push([]); rows.push(['Intermediary','Zone','Category','FY25 Total ('+unitLabel().trim()+')','Share %','Scenario Allocation ('+unitLabel().trim()+')','ATS %','Activation %','Adjusted Allocation ('+unitLabel().trim()+')']); document.querySelectorAll('#interTable tbody tr').forEach(tr=>{ const tds=tr.querySelectorAll('td'); const intermediary=tds[0].textContent; const zone=tds[1].textContent; const category=tds[2].textContent; const fy25=tds[3].textContent; const share=tds[4].textContent; const alloc=tds[5].textContent; const ats=tr.querySelector('.atsRow').value; const act=tr.querySelector('.actRow').value; const adjusted=tds[8].textContent; rows.push([intermediary,zone,category,fy25,share,alloc,ats,act,adjusted]); }); rows.push([]); rows.push(['LOB','Product','FY25 Total ('+unitLabel().trim()+')','Share %','Scenario Allocation ('+unitLabel().trim()+')','ATS %','Activation %','Adjusted Allocation ('+unitLabel().trim()+')']); document.querySelectorAll('#prodTable tbody tr').forEach(tr=>{ const tds=tr.querySelectorAll('td'); const lob=tds[0].textContent; const product=tds[1].textContent; const fy25=tds[2].textContent; const share=tds[3].textContent; const alloc=tds[4].textContent; const ats=tr.querySelector('.patsRow').value; const act=tr.querySelector('.pactRow').value; const adjusted=tds[7].textContent; rows.push([lob,product,fy25,share,alloc,ats,act,adjusted]); }); const csv=rows.map(r=> r.map(x=> '"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n'); const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='Q1FY26_Simulator_Export.csv'; a.click(); URL.revokeObjectURL(url); }
+
+// Initial note
+document.getElementById('kpiTotal').innerText='Upload Excel to begin';
+
+
+/* === Help / Manual Toggle ============================================== */
+(function(){
+  const help = document.getElementById('helpSidebar');
+  const openBtn = document.getElementById('toggleHelp');
+  const closeBtn = document.getElementById('closeHelp');
+
+  function openHelp(){
+    if (!help) return;
+    help.classList.add('open');
+    help.setAttribute('aria-hidden', 'false');
+  }
+  function closeHelp(){
+    if (!help) return;
+    help.classList.remove('open');
+    help.setAttribute('aria-hidden', 'true');
+  }
+
+  if (openBtn) openBtn.addEventListener('click', openHelp);
+  if (closeBtn) closeBtn.addEventListener('click', closeHelp);
+  document.addEventListener('keydown', (e)=>{
+    if (e.key === 'Escape') closeHelp();
+  });
+})();
+
+
+</script>
+</body>
+</html>
