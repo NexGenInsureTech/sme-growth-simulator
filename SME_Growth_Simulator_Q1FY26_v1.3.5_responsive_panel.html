@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SME GWP Growth Simulator (Q1 FY26) — v1.3.5 Responsive Panel</title>
+  <style>
+    :root {
+      --bg: #0f172a;               /* slate-900 */
+      --card: #111827;             /* gray-900 */
+      --muted: #94a3b8;            /* slate-400 */
+      --text: #e5e7eb;             /* gray-200 */
+      --primary-600: #0284c7;      /* sky-600 */
+      --warn: #f59e0b;             /* amber-500 */
+      --border: rgba(148,163,184,0.25);
+      --shadow: 0 8px 24px rgba(0,0,0,0.35);
+      --radius: 10px;
+      --gap-2: 10px;
+      --gap-3: 14px;
+      --gap-4: 20px;
+      --max-w: 1200px;
+    }
+    html, body {
+      height: 100%;
+      background: linear-gradient(180deg, #0b1020, var(--bg));
+      color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+      line-height: 1.35;
+    }
+    .page { max-width: var(--max-w); margin: 0 auto; padding: 24px clamp(14px, 2.5vw, 28px); }
+    header { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: var(--gap-3); margin-bottom: var(--gap-4); }
+    .title { display: flex; align-items: baseline; gap: var(--gap-2); }
+    .badge { background: #1f2937; color: var(--muted); border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+    .muted { color: var(--muted); font-size: 12px; }
+
+    /* === Three-row Control Panel === */
+    .panel { display: grid; gap: 16px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+    .panel-row { display: grid; gap: 14px; }
+    .panel-row.two-col   { grid-template-columns: 1fr 1fr; }
+    .panel-row.three-col { grid-template-columns: 1fr 1fr 1fr; }
+    @media (max-width: 1024px) { .panel-row.three-col { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 780px)  { .panel-row.two-col, .panel-row.three-col { grid-template-columns: 1fr; } }
+
+    .group { display: grid; gap: 10px; align-content: start; min-width: 0; }
+    .group-title { font-weight: 600; font-size: 13px; color: var(--muted); }
+    .fields { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; }
+    @media (max-width: 560px) { .fields { grid-template-columns: 1fr; } }
+    .checkbox-inline { display: inline-flex; align-items: center; gap: 8px; }
+
+    .segmented { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+    .segmented button { background: transparent; color: var(--text); border: 0; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+    .segmented button[aria-pressed="true"] { background: var(--primary-600); }
+
+    input[type="number"], select { background: #0b1222; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 13px; min-width: 90px; }
+    input[type="checkbox"] { accent-color: var(--primary-600); }
+
+    .actions-rail { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-self: end; }
+    @media (max-width: 780px) { .actions-rail { justify-self: start; } }
+
+    .btn { background: #0b1222; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-weight: 600; cursor: pointer; }
+    .btn.primary { background: var(--primary-600); border-color: var(--primary-600); }
+    .btn.ghost   { background: transparent; }
+    .btn.warn    { background: var(--warn); color: black; }
+
+    /* KPI grid */
+    .grid { display: grid; gap: var(--gap-3); grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    @media (max-width: 1024px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px)  { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--gap-3); box-shadow: var(--shadow); }
+    .kpi { display: grid; gap: 4px; }
+    .kpi .label { color: var(--muted); font-size: 12px; }
+    .kpi .value { font-size: clamp(18px, 3vw, 28px); font-weight: 700; }
+
+    .section-title { display: flex; align-items: center; justify-content: space-between; margin-top: var(--gap-4); margin-bottom: var(--gap-2); }
+    .table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    thead { position: sticky; top: 0; background: #0f162a; }
+    th, td { padding: 10px; border-bottom: 1px solid var(--border); text-align: left; font-size: 13px; }
+    tbody tr:hover { background: rgba(56,189,248,0.06); }
+
+    .footer { color: var(--muted); font-size: 12px; margin-top: var(--gap-4); }
+
+    /* Help modal */
+    .help-modal { position: fixed; inset: 0; display: none; background: rgba(3,6,23,0.8); }
+    .help-modal[open] { display: grid; place-items: center; }
+    .help-dialog { width: min(900px, 92vw); max-height: 80vh; overflow: auto; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: var(--gap-4); }
+    .help-dialog h3 { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <div class="page" role="application" aria-label="SME GWP Growth Simulator">
+    <header>
+      <div class="title">
+        <h1 style="margin:0;font-size:clamp(20px,4vw,28px)">SME GWP Growth Simulator — Q1 FY26</h1>
+        <span class="badge" aria-label="Version">v1.3.5 Responsive (Three-row panel)</span>
+      </div>
+      <div id="status" class="muted">Upload your ACTIVE_AGENT_MASTER.xlsx to begin · Reads Sheet1 & Sheet2</div>
+    </header>
+
+    <!-- === Three-row Control Panel === -->
+    <section class="panel" aria-label="Simulation controls">
+      <!-- Row 1: Upload + Status -->
+      <div class="panel-row">
+        <div class="group">
+          <label for="file" class="group-title">Upload Excel</label>
+          <input id="file" type="file" accept=".xlsx" aria-describedby="status">
+          <small class="muted">Tip: Use the same layout as ACTIVE_AGENT_MASTER.xlsx (Sheet1 & Sheet2)</small>
+        </div>
+      </div>
+
+      <!-- Row 2: Scenario + Global Levers -->
+      <div class="panel-row two-col">
+        <div class="group">
+          <div class="group-title">Scenario</div>
+          <div class="segmented" id="scenario" role="toolbar" aria-label="Scenario">
+            <button type="button" data-s="base" aria-pressed="true">Base</button>
+            <button type="button" data-s="stretch" aria-pressed="false">Stretch</button>
+            <button type="button" data-s="aggr" aria-pressed="false">Aggressive</button>
+          </div>
+        </div>
+        <div class="group">
+          <div class="group-title">Global Levers</div>
+          <div class="fields">
+            <label for="ats">ATS %</label>
+            <input id="ats" type="number" min="0" max="100" step="1" value="0">
+            <label for="act">Activation %</label>
+            <input id="act" type="number" min="0" max="100" step="1" value="0">
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 3: Units + RM Filter + Baseline Source -->
+      <div class="panel-row three-col">
+        <div class="group">
+          <div class="group-title">Units</div>
+          <div class="segmented" id="unit" role="radiogroup" aria-label="Unit">
+            <button type="button" data-u="cr" aria-pressed="true">₹ Cr</button>
+            <button type="button" data-u="lk" aria-pressed="false">₹ Lakh</button>
+            <button type="button" data-u="mn" aria-pressed="false">Million</button>
+          </div>
+        </div>
+        <div class="group">
+          <label for="rm" class="group-title">Filter by RM</label>
+          <select id="rm"><option value="all">All RMs</option></select>
+        </div>
+        <div class="group">
+          <label for="baseline" class="group-title">Baseline Source</label>
+          <select id="baseline">
+            <option value="q1fy25">Q1 FY25 Grand Totals</option>
+            <option value="fy25avg">FY25 Quarterly Average</option>
+            <option value="fy25q4">FY25 Q4 (Oct–Dec) Run‑rate</option>
+            <option value="manual">Manual Q1 Target (₹)</option>
+          </select>
+          <div class="fields" id="baseline-manual" hidden>
+            <label for="manualTarget">Manual Q1 Target (₹)</label>
+            <input id="manualTarget" type="number" min="0" step="1000000" value="0">
+            <label class="checkbox-inline"><input type="checkbox" id="applyScenarioManual"> Apply scenario uplift to Manual</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 4: Operational uplifts + Actions rail -->
+      <div class="panel-row two-col">
+        <div class="group">
+          <div class="group-title">Operational Uplifts</div>
+          <div class="fields">
+            <label for="capacity">Capacity %</label>
+            <input id="capacity" type="number" min="0" max="100" step="1" value="0">
+            <label for="maturity">Channel Maturity %</label>
+            <input id="maturity" type="number" min="0" max="100" step="1" value="0">
+          </div>
+        </div>
+        <aside class="actions-rail">
+          <button class="btn ghost" id="reset">Reset</button>
+          <button class="btn primary" id="apply">Apply Levers</button>
+          <button class="btn" id="download">Download CSV</button>
+          <button class="btn" id="helpBtn" aria-haspopup="dialog">Help / Manual</button>
+        </aside>
+      </div>
+    </section>
+
+    <!-- KPI cards -->
+    <div class="grid" aria-label="KPI cards">
+      <div class="card kpi"><div class="label">Total Q1 GWP</div><div class="value" id="kpi-q1">—</div></div>
+      <div class="card kpi"><div class="label">Jan</div><div class="value" id="kpi-jan">—</div></div>
+      <div class="card kpi"><div class="label">Feb</div><div class="value" id="kpi-feb">—</div></div>
+      <div class="card kpi"><div class="label">Mar</div><div class="value" id="kpi-mar">—</div></div>
+    </div>
+
+    <!-- Tables -->
+    <div class="section-title">
+      <h2 style="margin:0">Top Intermediaries — per‑partner levers</h2>
+      <div><label class="muted"><input type="checkbox" id="compactInter"> Compact</label></div>
+    </div>
+    <div class="table-wrap card" id="intermediaries-wrap" aria-live="polite">
+      <table id="intermediaries">
+        <thead>
+          <tr>
+            <th>Intermediary</th><th>Zone</th><th>Category</th><th>FY25 Total</th><th>Share</th><th>Scenario Allocation (Q1)</th><th>ATS %</th><th>Activation %</th><th>Adjusted Allocation</th><th>Recommendation</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="section-title">
+      <h2 style="margin:0">Top Products — editable ATS & Activation per row</h2>
+      <div><label class="muted"><input type="checkbox" id="compactProd"> Compact</label></div>
+    </div>
+    <div class="table-wrap card" id="products-wrap" aria-live="polite">
+      <table id="products">
+        <thead>
+          <tr>
+            <th>LOB</th><th>Product</th><th>FY25 Total</th><th>Share</th><th>Scenario Allocation (Q1)</th><th>ATS %</th><th>Activation %</th><th>Adjusted Allocation</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="footer">v1.3.5 panel refactor: grouped controls across three rows for better scanability and mobile ergonomics.</div>
+  </div>
+
+  <!-- Help / Manual -->
+  <div class="help-modal" id="help" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="help-dialog">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <h3 id="help-title">Simulator Manual</h3>
+        <button class="btn" id="helpClose" aria-label="Close">✕</button>
+      </div>
+      <div class="content" style="display:grid; gap: 10px;">
+        <p><strong>What this does:</strong> Upload <code>ACTIVE_AGENT_MASTER.xlsx</code> (Sheet1 & Sheet2). The app builds Base/Stretch/Aggressive Jan–Mar allocations, then lets you apply global and per-row ATS & Activation levers, and export CSV.</p>
+        <ol>
+          <li><strong>Scenario</strong>: Base (+10%), Stretch (+25%), Aggressive (+40%).</li>
+          <li><strong>Unit toggle</strong>: show values in ₹ Cr / ₹ Lakh / Million.</li>
+          <li><strong>Tables</strong>: Intermediaries + Products with live adjusted allocation.</li>
+          <li><strong>Export</strong>: Download the current plan as CSV.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- Local script includes expected to be present alongside the HTML -->
+  <script src="assets/js/xlsx.full.min.js"></script>
+  <script src="assets/js/chart.umd.js"></script>
+  <script>
+    const state = {
+      scenario: 'base', unit: 'cr', ats: 0, act: 0, rm: 'all',
+      baseline: 'q1fy25', manualTarget: 0, applyScenarioManual: false,
+      capacity: 0, maturity: 0,
+      dataLoaded: false,
+      products: [],
+      partners: []
+    };
+
+    function fmtINR(x) {
+      if (x == null || isNaN(x)) return '—';
+      const u = state.unit; let y = Number(x);
+      if (u === 'cr') y = y / 1e7; if (u === 'lk') y = y / 1e5; if (u === 'mn') y = y / 1e6;
+      return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(y);
+    }
+
+    function bindSegmented(id, key) {
+      const el = document.getElementById(id);
+      el.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          el.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+          btn.setAttribute('aria-pressed', 'true');
+          state[key] = btn.dataset[id === 'scenario' ? 's' : 'u'];
+          render();
+        });
+      });
+    }
+    bindSegmented('scenario', 'scenario');
+    bindSegmented('unit', 'unit');
+
+    document.getElementById('ats').addEventListener('input', e => { state.ats = Number(e.target.value)||0; });
+    document.getElementById('act').addEventListener('input', e => { state.act = Number(e.target.value)||0; });
+    document.getElementById('rm').addEventListener('change', e => { state.rm = e.target.value; render(); });
+
+    document.getElementById('baseline').addEventListener('change', e => {
+      state.baseline = e.target.value;
+      document.getElementById('baseline-manual').hidden = state.baseline !== 'manual';
+    });
+    document.getElementById('manualTarget').addEventListener('input', e => { state.manualTarget = Number(e.target.value)||0; });
+    document.getElementById('applyScenarioManual').addEventListener('change', e => { state.applyScenarioManual = e.target.checked; });
+
+    document.getElementById('capacity').addEventListener('input', e => { state.capacity = Number(e.target.value)||0; });
+    document.getElementById('maturity').addEventListener('input', e => { state.maturity = Number(e.target.value)||0; });
+
+    document.getElementById('reset').addEventListener('click', () => { window.location.reload(); });
+
+    // Help dialog
+    const help = document.getElementById('help');
+    document.getElementById('helpBtn').addEventListener('click', () => help.setAttribute('open', ''));
+    document.getElementById('helpClose').addEventListener('click', () => help.removeAttribute('open'));
+
+    // File upload + parsing
+    const fileInput = document.getElementById('file');
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0]; if (!file) return;
+      document.getElementById('status').textContent = 'Reading Excel…';
+      const data = await file.arrayBuffer();
+      let wb; try { wb = XLSX.read(data, { type: 'array' }); } catch (err) { document.getElementById('status').textContent = 'Error reading file'; console.error(err); return; }
+      const sheet1 = wb.Sheets[wb.SheetNames[0]]; const sheet2 = wb.Sheets[wb.SheetNames[1]];
+      const s1 = XLSX.utils.sheet_to_json(sheet1, { defval: null });
+      const s2 = XLSX.utils.sheet_to_json(sheet2, { defval: null });
+      state.partners = s1.slice(0, 30);
+      state.products = s2.filter(r => r.LOB).slice(0, 40);
+      state.dataLoaded = true;
+      document.getElementById('status').textContent = `Loaded: Sheet1 ${s1.length} rows · Sheet2 ${s2.length} rows`;
+      render();
+    });
+
+    function recommend(row) {
+      const a = Number(row.rowAct || state.act) || 0;
+      const t = Number(row.rowAts || state.ats) || 0;
+      if (a >= 20 && t >= 10) return 'Pod focus + bundle';
+      if (a >= 10) return 'Reactivate + renewal cadence';
+      return 'Maintain cadence';
+    }
+
+    function render() {
+      const base = 1000000000; // ₹10 Cr baseline placeholder
+      let uplift = 0; if (state.scenario === 'base') uplift = 0.10; else if (state.scenario === 'stretch') uplift = 0.25; else uplift = 0.40;
+      let q1 = base * (1 + uplift) * (1 + state.ats/100) * (1 + state.act/100) * (1 + state.capacity/100) * (1 + state.maturity/100);
+      if (state.baseline === 'manual') { const manual = state.manualTarget || 0; q1 = state.applyScenarioManual ? manual * (1 + uplift) : manual; }
+      document.getElementById('kpi-q1').textContent = fmtINR(q1);
+      document.getElementById('kpi-jan').textContent = fmtINR(q1/3);
+      document.getElementById('kpi-feb').textContent = fmtINR(q1/3);
+      document.getElementById('kpi-mar').textContent = fmtINR(q1/3);
+
+      const pBody = document.querySelector('#intermediaries tbody'); pBody.innerHTML = '';
+      (state.partners||[]).forEach((r, idx) => {
+        const fy25 = Number(r.FY25_Total || r.FY25 || 0); const share = Number(r.Share || 0);
+        const alloc = fy25 * (1 + uplift) / 4; const rowAts = Number(r.ATS || 0); const rowAct = Number(r.Activation || 0);
+        const adjusted = alloc * (1 + (rowAts || state.ats)/100) * (1 + (rowAct || state.act)/100);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.Intermediary || r.Name || '—'}</td>
+          <td>${r.Zone || '—'}</td>
+          <td>${r.Category || '—'}</td>
+          <td>${fmtINR(fy25)}</td>
+          <td>${share ? share.toFixed(1)+'%' : '—'}</td>
+          <td>${fmtINR(alloc)}</td>
+          <td contenteditable data-field="rowAts" data-index="${idx}">${rowAts || state.ats}</td>
+          <td contenteditable data-field="rowAct" data-index="${idx}">${rowAct || state.act}</td>
+          <td>${fmtINR(adjusted)}</td>
+          <td>${recommend({rowAct, rowAts})}</td>`;
+        pBody.appendChild(tr);
+      });
+
+      const prodBody = document.querySelector('#products tbody'); prodBody.innerHTML = '';
+      (state.products||[]).forEach((r, idx) => {
+        const fy25 = Number(r.FY25_Total || r.FY25 || 0); const share = Number(r.Share || 0);
+        const alloc = fy25 * (1 + uplift) / 4; const rowAts = Number(r.ATS || 0); const rowAct = Number(r.Activation || 0);
+        const adjusted = alloc * (1 + (rowAts || state.ats)/100) * (1 + (rowAct || state.act)/100);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.LOB || '—'}</td>
+          <td>${r.Product || '—'}</td>
+          <td>${fmtINR(fy25)}</td>
+          <td>${share ? share.toFixed(1)+'%' : '—'}</td>
+          <td>${fmtINR(alloc)}</td>
+          <td contenteditable data-field="rowAtsP" data-index="${idx}">${rowAts || state.ats}</td>
+          <td contenteditable data-field="rowActP" data-index="${idx}">${rowAct || state.act}</td>
+          <td>${fmtINR(adjusted)}</td>`;
+        prodBody.appendChild(tr);
+      });
+
+      document.getElementById('intermediaries').style.fontSize = document.getElementById('compactInter').checked ? '12px' : '13px';
+      document.getElementById('products').style.fontSize       = document.getElementById('compactProd').checked ? '12px' : '13px';
+    }
+
+    document.addEventListener('input', (e) => {
+      const t = e.target; if (!t.matches('[contenteditable][data-field]')) return;
+      const idx = Number(t.dataset.index); const field = t.dataset.field; const v = Number(t.textContent) || 0;
+      if (field === 'rowAts')  state.partners[idx].ATS = v;
+      if (field === 'rowAct')  state.partners[idx].Activation = v;
+      if (field === 'rowAtsP') state.products[idx].ATS = v;
+      if (field === 'rowActP') state.products[idx].Activation = v;
+      render();
+    });
+
+    function toCSV(rows, columns) {
+      const header = columns.join(',');
+      const body = rows.map(r => columns.map(c => JSON.stringify(r[c] ?? '')).join(',')).join('\n');
+      return header + '\n' + body;
+    }
+    document.getElementById('download').addEventListener('click', () => {
+      const colsP = ['Intermediary','Zone','Category','FY25_Total','Share','ATS','Activation'];
+      const colsPr= ['LOB','Product','FY25_Total','Share','ATS','Activation'];
+      const csv1 = toCSV(state.partners, colsP);
+      const csv2 = toCSV(state.products, colsPr);
+      const blob = new Blob([`Intermediaries\n${csv1}\n\nProducts\n${csv2}`], { type: 'text/csv' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'SME_Q1FY26_Plan.csv'; a.click(); URL.revokeObjectURL(a.href);
+    });
+
+    render();
+  </script>
+</body>
+</html>
